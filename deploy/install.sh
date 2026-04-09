@@ -150,6 +150,19 @@ EOF
         systemctl restart systemd-resolved
         ensure_host_dns
         log "systemd-resolved stub listener disabled."
+    elif ss -lnup 2>/dev/null | grep ':53 ' | grep -q 'pihole-FTL'; then
+        warn "Pi-hole (pihole-FTL) is holding port 53. Stopping it..."
+        systemctl stop pihole-FTL 2>/dev/null || true
+        systemctl disable pihole-FTL 2>/dev/null || true
+        sleep 2
+        if ss -lnup 2>/dev/null | grep -q ':53 '; then
+            warn "Port 53 still in use after stopping pihole-FTL. Killing process..."
+            PH_PID=$(ss -lnup 2>/dev/null | grep ':53 ' | grep -oP 'pid=\K[0-9]+' | head -1)
+            if [ -n "$PH_PID" ]; then kill "$PH_PID" 2>/dev/null || true; sleep 1; fi
+        fi
+        install_safety_net
+        ensure_host_dns
+        log "Pi-hole stopped. Sentinel will take over DNS."
     elif docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" ps --quiet 2>/dev/null | grep -q .; then
         warn "Previous Sentinel containers are still running. Stopping them first..."
         docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" down 2>/dev/null || true
@@ -158,7 +171,16 @@ EOF
     else
         warn "Something else is using port 53. Attempting to identify..."
         ss -lnup 2>/dev/null | grep ':53 ' || true
-        warn "You may need to stop it manually before Sentinel can bind."
+        warn "Attempting to free port 53..."
+        PORT53_PID=$(ss -lnup 2>/dev/null | grep ':53 ' | grep -oP 'pid=\K[0-9]+' | head -1)
+        if [ -n "$PORT53_PID" ]; then
+            kill "$PORT53_PID" 2>/dev/null || true
+            sleep 2
+            log "Killed process $PORT53_PID. Port 53 should be free."
+        else
+            warn "Could not identify the process. You may need to stop it manually."
+        fi
+        install_safety_net
     fi
 fi
 
