@@ -2,35 +2,29 @@
 Description=Sentinel DNS — RAM-first ad-blocking DNS resolver
 After=network-online.target docker.service
 Wants=network-online.target
-Documentation=https://github.com/sentinel-dns/sentinel
+Documentation=https://github.com/Alexanderrrrrrw/SentinelDNS
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/sentinel-dns/deploy
-EnvironmentFile=/opt/sentinel-dns/deploy/.env
-ExecStart=/usr/bin/docker compose up --no-build
-ExecStop=/usr/bin/docker compose down
+EnvironmentFile=-/opt/sentinel-dns/deploy/.env
+ExecStart=docker compose up --no-build
+ExecStop=docker compose down
 
-# ── SD-card wear leveling ──
-# Class 3 = IOPRIO_CLASS_IDLE — only do I/O when nothing else needs the disk.
+# SD-card wear leveling: idle I/O class so checkpoint flushes
+# never compete with DNS packet handling.
 IOSchedulingClass=idle
 IOSchedulingPriority=7
 
-# Lower CPU priority so DNS packets always win.
 Nice=5
 CPUSchedulingPolicy=batch
 
-# OOM: prefer killing Sentinel over the kernel or sshd.
+# Prefer killing Sentinel over the kernel or sshd on OOM.
 OOMScoreAdjust=200
 
 Restart=always
 RestartSec=10
 TimeoutStopSec=30
-
-# Security hardening
-ProtectSystem=strict
-ReadWritePaths=/opt/sentinel-dns /var/lib/docker
-NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
