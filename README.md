@@ -22,6 +22,51 @@ That's it. The script installs Docker if needed, disables `systemd-resolved` wit
 
 `default.fst` is a **bootstrap accelerator**, not the long-term source of truth. Sentinel triggers gravity syncs after first boot so block data is refreshed from live upstream lists.
 
+## Raspberry Pi Setup (First 5 Minutes)
+
+### 1) Install on the Pi
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | sudo bash
+```
+
+### 2) Verify services are up
+
+```bash
+cd /opt/sentinel-dns/deploy
+docker compose ps
+docker compose logs --tail=100
+```
+
+### 3) Quick DNS sanity checks
+
+```bash
+nslookup example.com 127.0.0.1
+nslookup doubleclick.net 127.0.0.1
+```
+
+Expected: `example.com` resolves, `doubleclick.net` is blocked (NXDOMAIN/null response based on mode).
+
+### 4) Open dashboard
+
+Visit:
+
+```text
+http://<pi-ip>:3000
+```
+
+### 5) Roll out safely
+
+Set **one test device** DNS to `<pi-ip>` first. Validate browsing + logs, then switch router DHCP DNS for whole network.
+
+### Rollback (if you need internet back instantly)
+
+```bash
+cd /opt/sentinel-dns/deploy
+docker compose down
+sudo systemctl enable --now systemd-resolved
+```
+
 ---
 
 ## Why not just use Pi-hole?
