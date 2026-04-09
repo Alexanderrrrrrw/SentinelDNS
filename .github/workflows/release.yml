@@ -1,0 +1,146 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-binaries:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: sentinel-control-plane-aarch64-linux
+          - target: armv7-unknown-linux-gnueabihf
+            os: ubuntu-latest
+            artifact: sentinel-control-plane-armv7-linux
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-rs
+        run: cargo install cross --locked
+
+      - name: Build binary via cross-rs
+        run: cross build --release -p sentinel-control-plane --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/sentinel-control-plane dist/${{ matrix.artifact }}
+          chmod +x dist/${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  build-default-fst:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build default.fst from top 3 lists
+        run: cargo run --release --manifest-path tools/default-fst-builder/Cargo.toml -- default.fst
+      - name: Upload default.fst
+        uses: actions/upload-artifact@v4
+        with:
+          name: default-fst
+          path: default.fst
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install + build dashboard
+        run: |
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm --filter sentinel-dashboard build
+      - name: Package standalone dashboard
+        run: |
+          mkdir -p dist
+          cd apps/dashboard
+          tar czf ../../dist/sentinel-dashboard-standalone.tar.gz \
+            .next/standalone \
+            .next/static \
+            public
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-dashboard-standalone
+          path: dist/sentinel-dashboard-standalone.tar.gz
+
+  publish:
+    needs: [build-binaries, build-default-fst, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -type f | while read f; do
+            cp "$f" release/
+          done
+          # Include deploy scripts
+          cp deploy/install.sh release/
+          cp deploy/sd-card-tuning.sh release/
+          cp deploy/sentinel-dns.service release/
+          cp deploy/.env.example release/
+          cp deploy/docker-compose.yml release/
+          ls -la release/
+
+      - name: Generate checksums
+        working-directory: release
+        run: sha256sum * > SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*
+          body: |
+            ## Sentinel DNS ${{ github.ref_name }}
+
+            ### Quick Install (Raspberry Pi)
+            ```bash
+            curl -sSL https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.sh | sudo bash
+            ```
+
+            ### Binaries
+            | File | Target |
+            |---|---|
+            | `sentinel-control-plane-aarch64-linux` | Raspberry Pi 4/5 (64-bit) |
+            | `sentinel-control-plane-armv7-linux` | Raspberry Pi 3/Zero 2W (32-bit) |
+            | `sentinel-dashboard-standalone.tar.gz` | Next.js dashboard (all platforms) |
+            | `default.fst` | Precompiled starter block index (top 3 curated ad-lists) |
+
+            ### Verify
+            ```bash
+            sha256sum -c SHA256SUMS
+            ```

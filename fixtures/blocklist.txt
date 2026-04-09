@@ -1,0 +1,14 @@
+# Sentinel DNS default blocklist
+# One domain per line. Supports hosts-file format (0.0.0.0 domain, 127.0.0.1 domain)
+# Lines starting with # are comments
+
+# Common ad/tracking domains
+0.0.0.0 ads.example.com
+0.0.0.0 tracker-01.ads-giant.com
+0.0.0.0 analytics.tracker.example.net
+0.0.0.0 telemetry.example.org
+
+# To use a real blocklist, replace this file or set SENTINEL_BLOCKLIST_PATH
+# to point to a file like those from:
+#   https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+#   https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt

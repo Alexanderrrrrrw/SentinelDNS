@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink text-slate-100 antialiased;
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(0, 243, 255, 0.12), transparent 40%),
+    radial-gradient(circle at 85% 15%, rgba(82, 255, 168, 0.08), transparent 35%),
+    radial-gradient(circle at 50% 80%, rgba(0, 243, 255, 0.05), transparent 40%),
+    linear-gradient(180deg, #050914, #0a0f1a 35%, #0d182b);
+  background-attachment: fixed;
+}
+
+.panel {
+  @apply rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-panel backdrop-blur-md;
+}
+
+.glass {
+  @apply rounded-2xl border border-white/[0.12] shadow-panel;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.glass-glow {
+  @apply glass shadow-glow;
+}
+
+.bento-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: minmax(0, auto);
+}
+
+@media (max-width: 1024px) {
+  .bento-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

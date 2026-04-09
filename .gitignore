@@ -1,0 +1,13 @@
+/target
+/.next
+/node_modules
+**/.next
+**/node_modules
+/.turbo
+.env
+.env.local
+*.db
+*.duckdb
+*.log
+dist
+coverage

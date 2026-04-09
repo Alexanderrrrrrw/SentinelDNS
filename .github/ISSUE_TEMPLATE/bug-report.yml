@@ -1,0 +1,75 @@
+name: Bug report
+description: Report a real bug in Sentinel DNS.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing this. Keep it sharp: repro steps, expected behavior, actual behavior.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What broke?
+      placeholder: One clear sentence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Exact steps from a clean start.
+      placeholder: |
+        1. Fresh install with install.sh
+        2. Set router DNS to ...
+        3. Open dashboard
+        4. Trigger query for ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste `docker compose logs` snippets or API errors.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Sentinel version / commit
+      placeholder: v0.1.0 or git SHA
+    validations:
+      required: true
+
+  - type: input
+    id: pi-model
+    attributes:
+      label: Hardware
+      placeholder: Raspberry Pi 4 2GB / Pi Zero 2W / VM
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Raspberry Pi OS Bookworm 64-bit
+    validations:
+      required: true

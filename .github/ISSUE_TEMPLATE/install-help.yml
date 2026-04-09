@@ -1,0 +1,57 @@
+name: Install help
+description: Setup/install support request for Raspberry Pi or local deployment.
+title: "[install] "
+labels: ["help wanted", "installation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need install help? Drop exact details here so we can debug fast.
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command you ran
+      render: shell
+      placeholder: curl -sSL .../install.sh | sudo bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: Copy the failing part only (not full terminal spam).
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Device model
+      placeholder: Raspberry Pi 5 4GB
+    validations:
+      required: true
+
+  - type: input
+    id: arch
+    attributes:
+      label: Architecture
+      placeholder: aarch64 / armv7l
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS version
+      placeholder: Raspberry Pi OS Bookworm (64-bit)
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything unusual in your setup?
+      description: Custom DNS, VPN, NAS, weird router, etc.

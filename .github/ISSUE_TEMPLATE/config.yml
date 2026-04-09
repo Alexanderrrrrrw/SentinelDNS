@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sentinel DNS docs
+    url: https://github.com/your-username/sentinel-dns#readme
+    about: Read install and troubleshooting docs first.

@@ -1,0 +1,41 @@
+FROM rust:1.86-bookworm AS builder
+
+WORKDIR /build
+COPY Cargo.toml Cargo.lock* ./
+COPY crates/ crates/
+
+RUN cargo build --release -p sentinel-control-plane
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system sentinel && useradd --system --gid sentinel sentinel
+
+COPY --from=builder /build/target/release/sentinel-control-plane /usr/local/bin/sentinel-control-plane
+COPY fixtures/ /etc/sentinel/fixtures/
+
+RUN mkdir -p /data && chown sentinel:sentinel /data
+VOLUME /data
+WORKDIR /data
+
+ENV SENTINEL_BLOCKLIST_PATH=/etc/sentinel/fixtures/blocklist.txt
+ENV SENTINEL_DB_DIR=/data
+ENV SENTINEL_DNS_BIND=0.0.0.0:53
+ENV SENTINEL_API_BIND=0.0.0.0:8080
+ENV SENTINEL_HEURISTICS=true
+ENV SENTINEL_GRAVITY_INTERVAL_SECS=604800
+ENV SENTINEL_RAM_LOG_CAPACITY=100000
+ENV SENTINEL_CHECKPOINT_SECS=900
+ENV SENTINEL_CHECKPOINT_BATCH=50000
+ENV RUST_LOG=info
+
+USER sentinel
+EXPOSE 53/udp 53/tcp 8080/tcp
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD ["sentinel-control-plane", "--version"] || exit 1
+
+ENTRYPOINT ["sentinel-control-plane"]

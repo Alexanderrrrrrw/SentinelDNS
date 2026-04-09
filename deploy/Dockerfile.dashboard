@@ -1,0 +1,31 @@
+FROM node:20-slim AS builder
+
+WORKDIR /build
+RUN corepack enable
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY apps/dashboard/ apps/dashboard/
+
+RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+
+WORKDIR /build/apps/dashboard
+RUN pnpm build
+
+FROM node:20-slim AS public-stage
+RUN mkdir -p /empty-public
+
+FROM node:20-slim
+
+WORKDIR /app
+RUN corepack enable
+
+COPY --from=builder /build/apps/dashboard/.next/standalone ./
+COPY --from=builder /build/apps/dashboard/.next/static ./.next/static
+COPY --from=public-stage /empty-public ./public
+COPY --from=builder /build/apps/dashboard/public ./public
+
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+EXPOSE 3000
+
+CMD ["node", "server.js"]
