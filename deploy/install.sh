@@ -133,7 +133,7 @@ EOF
 
 # ─── Free port 53 (systemd-resolved often holds it) ───
 
-if ss -lnup | grep -q ':53 '; then
+if ss -lnup 2>/dev/null | grep -q ':53 '; then
     warn "Port 53 is already in use."
     if systemctl is-active --quiet systemd-resolved; then
         warn "systemd-resolved is holding port 53. Disabling its stub listener..."

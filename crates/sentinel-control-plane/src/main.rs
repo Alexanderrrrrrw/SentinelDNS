@@ -453,10 +453,24 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(api_bind).await?;
     let shutdown_notify_signal = Arc::clone(&shutdown_notify);
     let shutdown_signal = async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to listen for ctrl+c");
-        tracing::info!("SIGTERM/ctrl+c received — triggering emergency flush");
+        #[cfg(unix)]
+        {
+            let mut sigterm = tokio::signal::unix::signal(
+                tokio::signal::unix::SignalKind::terminate(),
+            )
+            .expect("failed to register SIGTERM handler");
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = sigterm.recv() => {}
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to listen for ctrl+c");
+        }
+        tracing::info!("shutdown signal received — triggering emergency flush");
         shutdown_notify_signal.notify_one();
     };
 

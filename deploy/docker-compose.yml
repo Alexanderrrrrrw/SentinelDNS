@@ -26,6 +26,12 @@ services:
       - sentinel-data:/data
     cap_add:
       - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
 
   dashboard:
@@ -38,7 +44,8 @@ services:
       - SENTINEL_API_URL=http://control-plane:8080
       - SENTINEL_ADMIN_TOKEN=${SENTINEL_ADMIN_TOKEN:-changeme}
     depends_on:
-      - control-plane
+      control-plane:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
