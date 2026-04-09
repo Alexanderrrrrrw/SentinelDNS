@@ -459,15 +459,17 @@ pub fn query_logs_merged(
 
     let ram_total = ram_entries.len();
 
-    // Get DuckDB results
-    let disk_result =
-        duckdb.query_logs(limit, offset.saturating_sub(ram_total as u32), domain_filter, action_filter)?;
-
-    let combined_total = ram_total + disk_result.total;
-
-    // Merge: RAM first (recent), then disk
     let offset = offset as usize;
     let limit = limit as usize;
+
+    // SQL OFFSET already accounts for RAM rows the user scrolled past,
+    // so we must NOT skip again in Rust — that was double-counting.
+    let disk_offset = offset.saturating_sub(ram_total) as u32;
+    let disk_limit = limit as u32;
+    let disk_result =
+        duckdb.query_logs(disk_limit, disk_offset, domain_filter, action_filter)?;
+
+    let combined_total = ram_total + disk_result.total;
 
     let mut merged = Vec::with_capacity(limit);
     if offset < ram_total {
@@ -477,8 +479,7 @@ pub fn query_logs_merged(
 
     if merged.len() < limit {
         let remaining = limit - merged.len();
-        let disk_skip = offset.saturating_sub(ram_total);
-        for entry in disk_result.logs.into_iter().skip(disk_skip).take(remaining) {
+        for entry in disk_result.logs.into_iter().take(remaining) {
             merged.push(entry);
         }
     }

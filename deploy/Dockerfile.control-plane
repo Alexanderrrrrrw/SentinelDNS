@@ -9,7 +9,7 @@ RUN cargo build --release -p sentinel-control-plane
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system sentinel && useradd --system --gid sentinel sentinel
@@ -36,6 +36,6 @@ USER sentinel
 EXPOSE 53/udp 53/tcp 8080/tcp
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD ["sentinel-control-plane", "--version"] || exit 1
+  CMD curl -f http://127.0.0.1:8080/healthz || exit 1
 
 ENTRYPOINT ["sentinel-control-plane"]

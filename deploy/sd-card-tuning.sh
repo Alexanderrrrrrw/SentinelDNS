@@ -22,12 +22,12 @@ echo ""
 # ── 1. /etc/fstab: Add noatime + commit=600 to root partition ──
 echo -e "${YELLOW}[1/5] Tuning /etc/fstab...${NC}"
 FSTAB="/etc/fstab"
-if grep -q "noatime" "$FSTAB"; then
-    echo "  ✓ noatime already present in fstab"
+if grep -q "ext4.*noatime" "$FSTAB"; then
+    echo "  ✓ noatime already present on ext4 mounts"
 else
-    # Add noatime to all ext4 partitions
-    sed -i 's/defaults/defaults,noatime,commit=600/' "$FSTAB" 2>/dev/null || true
-    # If no 'defaults' keyword, add noatime to ext4 lines
+    # Only touch ext4 lines — leave vfat /boot partition alone (adding
+    # commit=600 to vfat would be invalid and could prevent booting).
+    sed -i '/ext4/ s/defaults/defaults,noatime,commit=600/' "$FSTAB" 2>/dev/null || true
     sed -i '/ext4/ {/noatime/! s/\(ext4\s\+\)\([^ ]\+\)/\1\2,noatime,commit=600/}' "$FSTAB" 2>/dev/null || true
     echo "  ✓ Added noatime + commit=600 to ext4 mounts"
 fi

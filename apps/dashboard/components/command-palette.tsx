@@ -204,7 +204,7 @@ export function CommandPalette() {
     (e: React.KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+        setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setActiveIndex((i) => Math.max(i - 1, 0));
