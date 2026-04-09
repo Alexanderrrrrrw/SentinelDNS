@@ -112,6 +112,25 @@ remove_safety_net() {
     fi
 }
 
+# Ensure host DNS keeps working after DNSStubListener=no.
+ensure_host_dns() {
+    # If resolv.conf still points to 127.0.0.53 while stub listener is off,
+    # apt/docker builds will fail with "Could not resolve deb.debian.org".
+    if grep -q "127.0.0.53" /etc/resolv.conf 2>/dev/null; then
+        warn "Host resolv.conf still points to 127.0.0.53; switching to systemd upstream resolver file..."
+        ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf || true
+    fi
+
+    # Last-resort fallback if resolver is still broken.
+    if ! getent hosts deb.debian.org >/dev/null 2>&1; then
+        warn "Host DNS still failing; applying temporary fallback resolvers..."
+        cat > /etc/resolv.conf <<EOF
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
+    fi
+}
+
 # ─── Free port 53 (systemd-resolved often holds it) ───
 
 if ss -lnup | grep -q ':53 '; then
@@ -127,6 +146,7 @@ if ss -lnup | grep -q ':53 '; then
 DNSStubListener=no
 EOF
         systemctl restart systemd-resolved
+        ensure_host_dns
         log "systemd-resolved stub listener disabled."
     else
         warn "Something else is using port 53. You may need to stop it manually."
