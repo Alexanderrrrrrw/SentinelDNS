@@ -18,7 +18,9 @@ Sentinel blocks ads, trackers, malware, and phishing at the network level — li
 curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | sudo bash
 ```
 
-That's it. The script installs Docker if needed, disables `systemd-resolved` with a self-healing fallback, generates an admin token, tunes the OS for SD card longevity, sets up iptables DNS interception, and starts everything. If anything goes wrong, a cron job automatically restores your system resolver within 60 seconds so you never brick a headless Pi.
+That's it. No compilation — pre-built Docker images are pulled from GHCR in ~60 seconds. The script installs Docker if needed, disables `systemd-resolved` with a self-healing fallback, generates an admin token, tunes the OS for SD card longevity, sets up iptables DNS interception, and starts everything. If anything goes wrong, a cron job automatically restores your system resolver within 60 seconds so you never brick a headless Pi.
+
+> **Developer mode:** Pass `--build-from-source` to compile from the repo instead of pulling images.
 
 `default.fst` is a **bootstrap accelerator**, not the long-term source of truth. Sentinel triggers gravity syncs after first boot so block data is refreshed from live upstream lists.
 
@@ -125,6 +127,7 @@ Real-time query stream via Server-Sent Events. Blocked domains shake on arrival.
 
 | | Pi-hole | Sentinel DNS |
 |---|---|---|
+| **Install time** | ~2 min | ~2 min (pre-built images, no compilation) |
 | **Blocklists on install** | 1 (StevenBlack) | 9 curated lists |
 | **CNAME uncloaking** | Partial | Full — short-circuits at first blocked hop |
 | **Heuristic detection** | None | 9-signal scoring engine (DGA, entropy, hex hashes) |

@@ -3,11 +3,13 @@ set -euo pipefail
 
 # ─── Sentinel DNS — Raspberry Pi Installer ───
 #
-# Usage:
-#   curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | bash
+# Default: pulls pre-built Docker images from GHCR. No compilation.
 #
-# Or after cloning:
-#   cd deploy && bash install.sh
+# Usage:
+#   curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | sudo bash
+#
+# Developer mode (compiles from source — slow):
+#   sudo bash install.sh --build-from-source
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,8 +23,17 @@ err()  { echo -e "${RED}[sentinel]${NC} $1"; }
 
 INSTALL_DIR="${SENTINEL_INSTALL_DIR:-/opt/sentinel-dns}"
 SAFETY_CRON="/etc/cron.d/sentinel-safety"
+REPO="Alexanderrrrrrw/SentinelDNS"
+RAW_BASE="https://raw.githubusercontent.com/${REPO}/main/deploy"
+BUILD_FROM_SOURCE=false
 
-# ─── Preflight checks ───
+for arg in "$@"; do
+    case "$arg" in
+        --build-from-source) BUILD_FROM_SOURCE=true ;;
+    esac
+done
+
+# ─── Preflight ───
 
 if [ "$(id -u)" -ne 0 ]; then
     err "This script must be run as root (use sudo)."
@@ -30,6 +41,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 log "Sentinel DNS Installer"
+if [ "$BUILD_FROM_SOURCE" = true ]; then
+    warn "Developer mode: building from source (this will be slow)."
+fi
 echo ""
 
 # ─── Detect Pi model + RAM ───
@@ -51,7 +65,6 @@ log "Class: $PI_CLASS | Arch: $ARCH | RAM: ${RAM_MB}MB"
 
 if [ "$RAM_MB" -gt 0 ] && [ "$RAM_MB" -lt 900 ]; then
     warn "<1GB RAM detected. Sentinel still works, but keep dashboard tabs minimal."
-    warn "Tip: set SENTINEL_RAM_LOG_CAPACITY=50000 in .env"
     echo ""
 fi
 
@@ -79,7 +92,6 @@ if ! docker compose version &>/dev/null; then
     if ! (apt-get update -y && apt-get install -y docker-compose-plugin); then
         err "Docker Compose plugin install failed."
         err "Manual install guide: $COMPOSE_HELP_URL"
-        err "Debian shortcut: sudo apt install docker-compose-plugin"
         exit 1
     fi
 fi
@@ -91,9 +103,6 @@ if ! docker compose version &>/dev/null; then
 fi
 
 # ─── Self-healing safety net ───
-# If Sentinel fails to bind port 53 within 90 seconds, this cron job
-# automatically re-enables systemd-resolved so the Pi doesn't lose
-# internet access. The safety net deletes itself once Sentinel is healthy.
 
 install_safety_net() {
     log "Installing DNS safety net (auto-restores system resolver if Sentinel fails)..."
@@ -112,17 +121,12 @@ remove_safety_net() {
     fi
 }
 
-# Ensure host DNS keeps working after DNSStubListener=no.
 ensure_host_dns() {
-    # If resolv.conf still points to 127.0.0.53 while stub listener is off,
-    # apt/docker builds will fail with "Could not resolve deb.debian.org".
     if grep -q "127.0.0.53" /etc/resolv.conf 2>/dev/null; then
         warn "Host resolv.conf still points to 127.0.0.53; switching to systemd upstream resolver file..."
         ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf || true
     fi
-
-    # Last-resort fallback if resolver is still broken.
-    if ! getent hosts deb.debian.org >/dev/null 2>&1; then
+    if ! getent hosts github.com >/dev/null 2>&1; then
         warn "Host DNS still failing; applying temporary fallback resolvers..."
         cat > /etc/resolv.conf <<EOF
 nameserver 1.1.1.1
@@ -131,15 +135,13 @@ EOF
     fi
 }
 
-# ─── Free port 53 (systemd-resolved often holds it) ───
+# ─── Free port 53 ───
 
 if ss -lnup 2>/dev/null | grep -q ':53 '; then
     warn "Port 53 is already in use."
     if systemctl is-active --quiet systemd-resolved; then
         warn "systemd-resolved is holding port 53. Disabling its stub listener..."
-
         install_safety_net
-
         mkdir -p /etc/systemd/resolved.conf.d
         cat > /etc/systemd/resolved.conf.d/sentinel.conf <<EOF
 [Resolve]
@@ -153,74 +155,113 @@ EOF
     fi
 fi
 
-# ─── Clone or update the repo ───
+# ─── Deploy directory ───
 
-if [ -d "$INSTALL_DIR/.git" ]; then
-    log "Updating existing installation at $INSTALL_DIR..."
-    cd "$INSTALL_DIR"
-    git pull --ff-only || warn "Could not auto-update. Continuing with existing code."
-elif [ -f "./docker-compose.yml" ]; then
-    log "Running from cloned repo."
-    INSTALL_DIR="$(cd .. && pwd)"
-    cd "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR/deploy"
+cd "$INSTALL_DIR/deploy"
+
+# ─── Source mode: clone full repo and compile ───
+
+if [ "$BUILD_FROM_SOURCE" = true ]; then
+    log "Cloning full repo for source build..."
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        cd "$INSTALL_DIR"
+        git pull --ff-only || warn "Could not auto-update. Continuing with existing code."
+    else
+        rm -rf "$INSTALL_DIR"
+        git clone "https://github.com/${REPO}.git" "$INSTALL_DIR"
+    fi
+    cd "$INSTALL_DIR/deploy"
+
+    if [ ! -f .env ]; then
+        cp .env.example .env
+        TOKEN=$(head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 32)
+        sed -i "s/changeme-to-a-long-random-string/$TOKEN/" .env
+        log "Generated admin token: ${CYAN}$TOKEN${NC}"
+        warn "Save this token — you'll need it to access the dashboard."
+        echo ""
+    fi
+
+    log "Building containers from source (this will take 15-30 minutes)..."
+    docker compose -f docker-compose.yml build
+    docker compose -f docker-compose.yml up -d
+
+# ─── Default mode: pull pre-built images (fast) ───
+
 else
-    log "Cloning Sentinel DNS to $INSTALL_DIR..."
-    git clone https://github.com/Alexanderrrrrrw/SentinelDNS.git "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
+    log "Downloading deployment files..."
+    curl -fsSL "${RAW_BASE}/docker-compose.prod.yml" -o docker-compose.yml
+    curl -fsSL "${RAW_BASE}/.env.example"            -o .env.example
+
+    TOKEN=""
+    if [ ! -f .env ]; then
+        cp .env.example .env
+        TOKEN=$(head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 32)
+        sed -i "s/changeme-to-a-long-random-string/$TOKEN/" .env
+        log "Generated admin token: ${CYAN}$TOKEN${NC}"
+        warn "Save this token — you'll need it to access the dashboard."
+        echo ""
+    else
+        log ".env already exists, keeping current config."
+        TOKEN=$(awk -F= '/^SENTINEL_ADMIN_TOKEN=/{print $2}' .env | tr -d '"' || true)
+    fi
+
+    log "Pulling pre-built images (no compilation)..."
+    docker compose pull
+
+    log "Starting Sentinel DNS..."
+    docker compose up -d
 fi
 
-# ─── Generate config ───
+# ─── SD card tuning (download if not present) ───
 
-cd deploy
-TOKEN=""
-
-if [ ! -f .env ]; then
-    log "Creating .env from template..."
-    cp .env.example .env
-
-    TOKEN=$(head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 32)
-    sed -i "s/changeme-to-a-long-random-string/$TOKEN/" .env
-
-    log "Generated admin token: ${CYAN}$TOKEN${NC}"
-    warn "Save this token — you'll need it to access the dashboard API."
-    echo ""
-else
-    log ".env already exists, keeping current config."
-    TOKEN=$(awk -F= '/^SENTINEL_ADMIN_TOKEN=/{print $2}' .env | tr -d '"' || true)
+if [ ! -f "$INSTALL_DIR/deploy/sd-card-tuning.sh" ]; then
+    curl -fsSL "${RAW_BASE}/sd-card-tuning.sh" -o "$INSTALL_DIR/deploy/sd-card-tuning.sh" 2>/dev/null || true
 fi
-
-# ─── SD card wear leveling (optional but recommended) ───
-
 if [ -f "$INSTALL_DIR/deploy/sd-card-tuning.sh" ]; then
     echo ""
     log "Applying SD card wear leveling optimizations..."
-    bash "$INSTALL_DIR/deploy/sd-card-tuning.sh"
+    bash "$INSTALL_DIR/deploy/sd-card-tuning.sh" || warn "SD card tuning failed (non-fatal)."
 fi
 
-# ─── Install systemd service ───
+# ─── Systemd service ───
 
-if [ -f "$INSTALL_DIR/deploy/sentinel-dns.service" ]; then
-    log "Installing systemd service..."
-    cp "$INSTALL_DIR/deploy/sentinel-dns.service" /etc/systemd/system/sentinel-dns.service
-    systemctl daemon-reload
-    systemctl enable sentinel-dns
-    log "Systemd service installed (sentinel-dns.service)."
-fi
+cat > /etc/systemd/system/sentinel-dns.service <<SVCEOF
+[Unit]
+Description=Sentinel DNS — RAM-first ad-blocking DNS resolver
+After=network-online.target docker.service
+Wants=network-online.target
+Documentation=https://github.com/${REPO}
+
+[Service]
+Type=simple
+WorkingDirectory=${INSTALL_DIR}/deploy
+EnvironmentFile=-${INSTALL_DIR}/deploy/.env
+ExecStart=docker compose up --no-build
+ExecStop=docker compose down
+IOSchedulingClass=idle
+Nice=5
+OOMScoreAdjust=200
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+systemctl daemon-reload
+systemctl enable sentinel-dns
+log "Systemd service installed."
 
 # ─── iptables: DNS interception + DoH blocking ───
 
 setup_iptables() {
     log "Configuring iptables DNS interception..."
-
-    # Detect primary LAN interface
     LAN_IF=$(ip route | awk '/default/{print $5; exit}')
-    if [ -z "$LAN_IF" ]; then
-        LAN_IF="eth0"
-    fi
+    if [ -z "$LAN_IF" ]; then LAN_IF="eth0"; fi
     log "LAN interface: $LAN_IF"
 
-    # Redirect all port-53 traffic through Sentinel (catches hardcoded 8.8.8.8 etc.)
-    # Skip if rules already exist
     if ! iptables -t nat -C PREROUTING -i "$LAN_IF" -p udp --dport 53 -j REDIRECT --to-port 53 2>/dev/null; then
         iptables -t nat -A PREROUTING -i "$LAN_IF" -p udp --dport 53 -j REDIRECT --to-port 53
         iptables -t nat -A PREROUTING -i "$LAN_IF" -p tcp --dport 53 -j REDIRECT --to-port 53
@@ -229,7 +270,6 @@ setup_iptables() {
         log "  DNS redirect: already configured"
     fi
 
-    # Block outbound DoH to known providers (forces browsers to fall back to system DNS)
     DOH_IPS=("8.8.8.8" "8.8.4.4" "1.1.1.1" "1.0.0.1" "9.9.9.9" "149.112.112.112")
     for ip in "${DOH_IPS[@]}"; do
         if ! iptables -C FORWARD -d "$ip" -p tcp --dport 443 -j REJECT 2>/dev/null; then
@@ -238,7 +278,6 @@ setup_iptables() {
     done
     log "  DoH blocking: Chrome/Android DoH bypass blocked for ${#DOH_IPS[@]} providers"
 
-    # Persist iptables rules across reboots
     if command -v netfilter-persistent &>/dev/null; then
         netfilter-persistent save 2>/dev/null || true
     elif command -v iptables-save &>/dev/null; then
@@ -248,13 +287,11 @@ setup_iptables() {
     log "  iptables rules persisted"
 }
 
-# Only set up iptables if the Pi is acting as a gateway (has ip_forward enabled or can enable it)
 if [ -f /proc/sys/net/ipv4/ip_forward ]; then
     FORWARD=$(cat /proc/sys/net/ipv4/ip_forward)
     if [ "$FORWARD" = "0" ]; then
-        warn "IP forwarding is disabled. iptables DNS redirect requires the Pi to be a network gateway."
-        warn "To enable: echo 1 > /proc/sys/net/ipv4/ip_forward"
-        warn "Skipping iptables setup. DNS blocking will only work for devices using DHCP DNS."
+        warn "IP forwarding disabled. iptables DNS redirect requires the Pi to be a gateway."
+        warn "Skipping iptables. DNS blocking still works for devices using DHCP DNS."
     else
         setup_iptables
     fi
@@ -262,15 +299,7 @@ else
     setup_iptables
 fi
 
-# ─── Build and deploy ───
-
-log "Building containers (this may take 10-20 minutes on first run)..."
-docker compose build
-
-log "Starting Sentinel DNS..."
-docker compose up -d
-
-# ─── Health check + safety net removal ───
+# ─── Health check ───
 
 log "Waiting for Sentinel to bind port 53..."
 HEALTHY=false
@@ -286,9 +315,11 @@ if [ "$HEALTHY" = true ]; then
     remove_safety_net
     log "Sentinel DNS is healthy and serving on port 53."
 else
-    warn "Sentinel has not bound port 53 yet. The safety net cron will auto-heal in 60 seconds if needed."
-    warn "Check logs: docker compose logs -f"
+    warn "Sentinel has not bound port 53 yet. Safety net cron will auto-heal if needed."
+    warn "Check logs: docker compose -f $INSTALL_DIR/deploy/docker-compose.yml logs -f"
 fi
+
+# ─── Done ───
 
 echo ""
 LOCAL_IP=$(hostname -I | awk '{print $1}')
@@ -305,23 +336,17 @@ if [ -n "${TOKEN:-}" ]; then
 fi
 log "════════════════════════════════════════════════"
 echo ""
-log "On first boot, Sentinel will automatically:"
-log "  - Seed 9 community blocklists"
-log "  - Seed 7 built-in regex rules"
-log "  - Download all blocklists (gravity pull)"
+log "Sentinel will automatically:"
+log "  - Seed 9 community blocklists + 7 regex rules"
+log "  - Pull all blocklists on first boot"
 log "  - Enable heuristic DGA/tracking detection"
 echo ""
 log "SD card protection:"
-log "  - RAM-first log pipeline (writes every 15 min, not every second)"
-log "  - 100k log records buffered in RAM (~30 MB)"
+log "  - RAM-first log pipeline (writes every 15 min)"
+log "  - 50k log records buffered in RAM (~15 MB)"
 log "  - Emergency flush on shutdown (zero data loss)"
-log "  - OS tuned: noatime, tmpfs, journal in RAM, swap disabled"
 echo ""
-log "Network hardening:"
-log "  - All DNS traffic redirected through Sentinel (iptables)"
-log "  - DoH bypass blocked for Google, Cloudflare, Quad9"
-log "  - Self-healing safety net for headless Pi recovery"
-echo ""
-log "View logs:  docker compose -f $INSTALL_DIR/deploy/docker-compose.yml logs -f"
-log "Stop:       docker compose -f $INSTALL_DIR/deploy/docker-compose.yml down"
-log "Update:     cd $INSTALL_DIR && git pull && cd deploy && docker compose up -d --build"
+log "Commands:"
+log "  Logs:    docker compose -f $INSTALL_DIR/deploy/docker-compose.yml logs -f"
+log "  Stop:    docker compose -f $INSTALL_DIR/deploy/docker-compose.yml down"
+log "  Update:  docker compose -f $INSTALL_DIR/deploy/docker-compose.yml pull && docker compose -f $INSTALL_DIR/deploy/docker-compose.yml up -d"

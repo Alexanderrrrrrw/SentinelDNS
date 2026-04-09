@@ -7,11 +7,15 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
 
 jobs:
+
+  # ── Cross-compile standalone binaries (attached to release) ──
   build-binaries:
     strategy:
       matrix:
@@ -49,6 +53,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: dist/${{ matrix.artifact }}
 
+  # ── Pre-compiled block index from curated lists ──
   build-default-fst:
     runs-on: ubuntu-latest
     steps:
@@ -62,20 +67,21 @@ jobs:
           name: default-fst
           path: default.fst
 
+  # ── Pre-built dashboard tarball ──
   dashboard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Install + build dashboard
         run: |
-          corepack pnpm install --frozen-lockfile
-          corepack pnpm --filter sentinel-dashboard build
+          pnpm install --frozen-lockfile
+          pnpm --filter sentinel-dashboard build
       - name: Package standalone dashboard
         run: |
           mkdir -p dist
@@ -90,8 +96,62 @@ jobs:
           name: sentinel-dashboard-standalone
           path: dist/sentinel-dashboard-standalone.tar.gz
 
+  # ── Build + push multi-arch Docker images to GHCR ──
+  # This is what makes install fast: the Pi just pulls pre-built images.
+  push-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version tag
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build + push control-plane image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.control-plane
+          platforms: linux/arm64,linux/arm/v7
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/alexanderrrrrrw/sentinel-control-plane:latest
+            ${{ env.REGISTRY }}/alexanderrrrrrw/sentinel-control-plane:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build + push dashboard image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.dashboard
+          platforms: linux/arm64,linux/arm/v7
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/alexanderrrrrrw/sentinel-dashboard:latest
+            ${{ env.REGISTRY }}/alexanderrrrrrw/sentinel-dashboard:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Create GitHub Release with all artifacts ──
   publish:
-    needs: [build-binaries, build-default-fst, dashboard]
+    needs: [build-binaries, build-default-fst, dashboard, push-images]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,12 +167,11 @@ jobs:
           find artifacts -type f | while read f; do
             cp "$f" release/
           done
-          # Include deploy scripts
           cp deploy/install.sh release/
+          cp deploy/docker-compose.prod.yml release/
           cp deploy/sd-card-tuning.sh release/
           cp deploy/sentinel-dns.service release/
           cp deploy/.env.example release/
-          cp deploy/docker-compose.yml release/
           ls -la release/
 
       - name: Generate checksums
@@ -129,16 +188,23 @@ jobs:
 
             ### Quick Install (Raspberry Pi)
             ```bash
-            curl -sSL https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.sh | sudo bash
+            curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/install.sh | sudo bash
+            ```
+            No compilation. Pre-built images are pulled from GHCR. Install takes ~2 minutes.
+
+            ### Docker Images
+            ```bash
+            docker pull ghcr.io/alexanderrrrrrw/sentinel-control-plane:${{ github.ref_name }}
+            docker pull ghcr.io/alexanderrrrrrw/sentinel-dashboard:${{ github.ref_name }}
             ```
 
-            ### Binaries
+            ### Standalone Binaries
             | File | Target |
             |---|---|
             | `sentinel-control-plane-aarch64-linux` | Raspberry Pi 4/5 (64-bit) |
             | `sentinel-control-plane-armv7-linux` | Raspberry Pi 3/Zero 2W (32-bit) |
             | `sentinel-dashboard-standalone.tar.gz` | Next.js dashboard (all platforms) |
-            | `default.fst` | Precompiled starter block index (top 3 curated ad-lists) |
+            | `default.fst` | Precompiled starter block index |
 
             ### Verify
             ```bash
