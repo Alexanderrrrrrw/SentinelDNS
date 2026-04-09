@@ -48,7 +48,7 @@ export function Sidebar() {
 
       <div className="space-y-2 px-5 py-4 text-[10px] text-slate-600">
         <a
-          href="https://github.com/your-username/sentinel-dns"
+          href="https://github.com/Alexanderrrrrrw/SentinelDNS"
           target="_blank"
           rel="noreferrer"
           className="block rounded border border-white/10 bg-white/5 px-2 py-1 text-center text-[10px] text-cyan-electric/90 transition-colors hover:bg-white/10 hover:text-cyan-electric"

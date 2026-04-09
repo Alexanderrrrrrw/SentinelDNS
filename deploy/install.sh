@@ -4,7 +4,7 @@ set -euo pipefail
 # ─── Sentinel DNS — Raspberry Pi Installer ───
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/your-username/sentinel-dns/main/deploy/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | bash
 #
 # Or after cloning:
 #   cd deploy && bash install.sh
@@ -145,7 +145,7 @@ elif [ -f "./docker-compose.yml" ]; then
     cd "$INSTALL_DIR"
 else
     log "Cloning Sentinel DNS to $INSTALL_DIR..."
-    git clone https://github.com/your-username/sentinel-dns.git "$INSTALL_DIR"
+    git clone https://github.com/Alexanderrrrrrw/SentinelDNS.git "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 fi
 

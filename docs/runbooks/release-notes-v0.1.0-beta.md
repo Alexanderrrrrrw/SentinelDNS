@@ -48,7 +48,7 @@ Gravity sync remains source-of-truth and refreshes block data after first boot.
 ## Upgrade / install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-username/sentinel-dns/main/deploy/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | sudo bash
 ```
 
 ## Feedback

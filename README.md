@@ -1,8 +1,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/built_with-Rust-dea584?style=flat-square&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/dashboard-Next.js_16-black?style=flat-square&logo=next.js" alt="Next.js" />
-  <img src="https://img.shields.io/github/license/your-username/sentinel-dns?style=flat-square" alt="License" />
-  <img src="https://img.shields.io/github/actions/workflow/status/your-username/sentinel-dns/ci.yml?style=flat-square&label=CI" alt="CI" />
+  <img src="https://img.shields.io/github/license/Alexanderrrrrrw/SentinelDNS?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/github/actions/workflow/status/Alexanderrrrrrw/SentinelDNS/ci.yml?style=flat-square&label=CI" alt="CI" />
   <img src="https://img.shields.io/badge/platform-Raspberry_Pi-c51a4a?style=flat-square&logo=raspberrypi" alt="Raspberry Pi" />
 </p>
 
@@ -15,7 +15,7 @@ Sentinel blocks ads, trackers, malware, and phishing at the network level — li
 ## One-Line Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-username/sentinel-dns/main/deploy/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/deploy/install.sh | sudo bash
 ```
 
 That's it. The script installs Docker if needed, disables `systemd-resolved` with a self-healing fallback, generates an admin token, tunes the OS for SD card longevity, sets up iptables DNS interception, and starts everything. If anything goes wrong, a cron job automatically restores your system resolver within 60 seconds so you never brick a headless Pi.
@@ -274,7 +274,7 @@ deploy/
 
 If Sentinel helped you reclaim your network, throw it a GitHub star:
 
-- [⭐ Star Sentinel DNS](https://github.com/your-username/sentinel-dns)
+- [⭐ Star Sentinel DNS](https://github.com/Alexanderrrrrrw/SentinelDNS)
 
 ## License
 
