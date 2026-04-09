@@ -44,7 +44,7 @@ jobs:
           chmod +x dist/${{ matrix.artifact }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: dist/${{ matrix.artifact }}
@@ -57,7 +57,7 @@ jobs:
       - name: Build default.fst from top 3 lists
         run: cargo run --release --manifest-path tools/default-fst-builder/Cargo.toml -- default.fst
       - name: Upload default.fst
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: default-fst
           path: default.fst
@@ -85,7 +85,7 @@ jobs:
             .next/static \
             public
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sentinel-dashboard-standalone
           path: dist/sentinel-dashboard-standalone.tar.gz
