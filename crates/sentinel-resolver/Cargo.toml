@@ -11,6 +11,6 @@ dashmap.workspace = true
 hickory-resolver = { version = "=0.24.4", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 sentinel-policy = { path = "../sentinel-policy" }
 sentinel-types = { path = "../sentinel-types" }
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 tokio.workspace = true
 tracing.workspace = true
