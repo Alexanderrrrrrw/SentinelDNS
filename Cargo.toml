@@ -19,7 +19,7 @@ authors = ["Sentinel DNS Team"]
 anyhow = "=1.0.98"
 arc-swap = "=1.7.1"
 axum = "=0.8.1"
-chrono = { version = "=0.4.40", features = ["serde"] }
+chrono = { version = "=0.4.44", features = ["serde"] }
 dashmap = "=6.1.0"
 metrics = "=0.24.2"
 metrics-exporter-prometheus = "=0.16.2"
