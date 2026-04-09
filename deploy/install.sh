@@ -150,8 +150,15 @@ EOF
         systemctl restart systemd-resolved
         ensure_host_dns
         log "systemd-resolved stub listener disabled."
+    elif docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" ps --quiet 2>/dev/null | grep -q .; then
+        warn "Previous Sentinel containers are still running. Stopping them first..."
+        docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" down 2>/dev/null || true
+        sleep 2
+        log "Old containers stopped."
     else
-        warn "Something else is using port 53. You may need to stop it manually."
+        warn "Something else is using port 53. Attempting to identify..."
+        ss -lnup 2>/dev/null | grep ':53 ' || true
+        warn "You may need to stop it manually before Sentinel can bind."
     fi
 fi
 
@@ -207,10 +214,49 @@ else
     fi
 
     log "Pulling pre-built images (no compilation)..."
-    docker compose pull
+    PULL_OK=false
+    if docker compose pull 2>&1; then
+        PULL_OK=true
+    fi
 
-    log "Starting Sentinel DNS..."
-    docker compose up -d
+    if [ "$PULL_OK" = true ]; then
+        log "Images pulled. Starting Sentinel DNS..."
+        docker compose up -d
+    else
+        warn "═══════════════════════════════════════════════════════════"
+        warn "Pre-built images not available yet."
+        warn "This usually means CI hasn't finished building them."
+        warn "Falling back to building from source on the Pi."
+        warn "This takes ~20-30 min on a Pi 5. Grab a coffee."
+        warn "═══════════════════════════════════════════════════════════"
+        echo ""
+
+        if ! command -v git &>/dev/null; then
+            log "Installing git..."
+            apt-get update -y && apt-get install -y git
+        fi
+
+        SAVED_ENV=""
+        if [ -f "$INSTALL_DIR/deploy/.env" ]; then
+            SAVED_ENV=$(cat "$INSTALL_DIR/deploy/.env")
+        fi
+
+        log "Cloning repository..."
+        CLONE_TMP=$(mktemp -d)
+        git clone --depth 1 "https://github.com/${REPO}.git" "$CLONE_TMP"
+        rm -rf "$INSTALL_DIR/crates" "$INSTALL_DIR/tools" "$INSTALL_DIR/apps" "$INSTALL_DIR/fixtures"
+        cp -rT "$CLONE_TMP" "$INSTALL_DIR"
+        rm -rf "$CLONE_TMP"
+
+        if [ -n "$SAVED_ENV" ]; then
+            echo "$SAVED_ENV" > "$INSTALL_DIR/deploy/.env"
+        fi
+
+        cd "$INSTALL_DIR/deploy"
+        log "Building containers from source..."
+        docker compose -f docker-compose.yml build
+        docker compose -f docker-compose.yml up -d
+    fi
 fi
 
 # ─── SD card tuning (download if not present) ───
