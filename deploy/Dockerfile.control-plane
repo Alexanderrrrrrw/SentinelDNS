@@ -1,11 +1,13 @@
 FROM rust:1.87-bookworm AS builder
 
 WORKDIR /build
+ENV CARGO_BUILD_JOBS=1
+ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 COPY Cargo.toml Cargo.lock* ./
 COPY crates/ crates/
 COPY tools/ tools/
 
-RUN cargo build --release -p sentinel-control-plane
+RUN cargo build --release -j 1 -p sentinel-control-plane
 
 FROM debian:bookworm-slim
 

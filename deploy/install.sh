@@ -10,6 +10,8 @@ set -euo pipefail
 #
 # Developer mode (compiles from source — slow):
 #   sudo bash install.sh --build-from-source
+# Full source mode (also compiles dashboard):
+#   sudo bash install.sh --build-from-source --full-source-build
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -26,10 +28,15 @@ SAFETY_CRON="/etc/cron.d/sentinel-safety"
 REPO="Alexanderrrrrrw/SentinelDNS"
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/main/deploy"
 BUILD_FROM_SOURCE=false
+AUTO_BUILD_ON_PULL_FAIL=false
+FULL_SOURCE_BUILD=false
+COMPOSE_FILE_PATH="$INSTALL_DIR/deploy/docker-compose.yml"
 
 for arg in "$@"; do
     case "$arg" in
         --build-from-source) BUILD_FROM_SOURCE=true ;;
+        --auto-build-on-pull-fail) AUTO_BUILD_ON_PULL_FAIL=true ;;
+        --full-source-build) FULL_SOURCE_BUILD=true ;;
     esac
 done
 
@@ -43,6 +50,9 @@ fi
 log "Sentinel DNS Installer"
 if [ "$BUILD_FROM_SOURCE" = true ]; then
     warn "Developer mode: building from source (this will be slow)."
+    if [ "$FULL_SOURCE_BUILD" != true ]; then
+        warn "Fast source mode: only control-plane is compiled; dashboard uses pre-built image."
+    fi
 fi
 echo ""
 
@@ -211,13 +221,35 @@ if [ "$BUILD_FROM_SOURCE" = true ]; then
         echo ""
     fi
 
-    log "Building containers from source (this will take 15-30 minutes)..."
-    docker compose -f docker-compose.yml build
-    docker compose -f docker-compose.yml up -d
+    FAST_COMPOSE="$INSTALL_DIR/deploy/docker-compose.source-fast.yml"
+    if [ "$FULL_SOURCE_BUILD" = true ] || [ ! -f "$FAST_COMPOSE" ]; then
+        log "Building containers from source (full mode)..."
+        docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" build
+        docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" up -d
+        COMPOSE_FILE_PATH="$INSTALL_DIR/deploy/docker-compose.yml"
+    else
+        log "Fast source mode: pulling pre-built dashboard image..."
+        DASHBOARD_PULL_OK=false
+        if docker compose -f "$FAST_COMPOSE" pull dashboard 2>&1; then
+            DASHBOARD_PULL_OK=true
+        fi
+        if [ "$DASHBOARD_PULL_OK" = true ]; then
+            log "Building control-plane from source..."
+            docker compose -f "$FAST_COMPOSE" build control-plane
+            docker compose -f "$FAST_COMPOSE" up -d --no-build
+            COMPOSE_FILE_PATH="$FAST_COMPOSE"
+        else
+            warn "Could not pull dashboard image. Falling back to full source build."
+            docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" build
+            docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" up -d
+            COMPOSE_FILE_PATH="$INSTALL_DIR/deploy/docker-compose.yml"
+        fi
+    fi
 
 # ─── Default mode: pull pre-built images (fast) ───
 
 else
+    COMPOSE_FILE_PATH="$INSTALL_DIR/deploy/docker-compose.yml"
     log "Downloading deployment files..."
     curl -fsSL "${RAW_BASE}/docker-compose.prod.yml" -o docker-compose.yml
     curl -fsSL "${RAW_BASE}/.env.example"            -o .env.example
@@ -245,12 +277,22 @@ else
         log "Images pulled. Starting Sentinel DNS..."
         docker compose up -d
     else
-        warn "═══════════════════════════════════════════════════════════"
-        warn "Pre-built images not available yet."
-        warn "This usually means CI hasn't finished building them."
-        warn "Falling back to building from source on the Pi."
-        warn "This takes ~20-30 min on a Pi 5. Grab a coffee."
-        warn "═══════════════════════════════════════════════════════════"
+        if [ "$AUTO_BUILD_ON_PULL_FAIL" != true ]; then
+            warn "═══════════════════════════════════════════════════════════"
+            warn "Pre-built images could not be pulled."
+            warn "Automatic source fallback is disabled by default to avoid"
+            warn "slow/fragile compilation on low-memory Raspberry Pi devices."
+            warn "═══════════════════════════════════════════════════════════"
+            echo ""
+            warn "Try again in a few minutes (GHCR propagation/CI lag), or run:"
+            warn "  sudo bash install.sh --build-from-source"
+            warn "Optional one-shot fallback:"
+            warn "  sudo bash install.sh --auto-build-on-pull-fail"
+            exit 1
+        fi
+
+        warn "Auto-fallback enabled. Building from source on this device..."
+        warn "This can take 20-40+ minutes depending on Pi model."
         echo ""
 
         if ! command -v git &>/dev/null; then
@@ -275,9 +317,30 @@ else
         fi
 
         cd "$INSTALL_DIR/deploy"
-        log "Building containers from source..."
-        docker compose -f docker-compose.yml build
-        docker compose -f docker-compose.yml up -d
+        FAST_COMPOSE="$INSTALL_DIR/deploy/docker-compose.source-fast.yml"
+        if [ -f "$FAST_COMPOSE" ]; then
+            log "Fast source fallback: pulling pre-built dashboard image..."
+            DASHBOARD_PULL_OK=false
+            if docker compose -f "$FAST_COMPOSE" pull dashboard 2>&1; then
+                DASHBOARD_PULL_OK=true
+            fi
+            if [ "$DASHBOARD_PULL_OK" = true ]; then
+                log "Building control-plane from source..."
+                docker compose -f "$FAST_COMPOSE" build control-plane
+                docker compose -f "$FAST_COMPOSE" up -d --no-build
+                COMPOSE_FILE_PATH="$FAST_COMPOSE"
+            else
+                warn "Could not pull dashboard image. Falling back to full source build."
+                docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" build
+                docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" up -d
+                COMPOSE_FILE_PATH="$INSTALL_DIR/deploy/docker-compose.yml"
+            fi
+        else
+            log "Building containers from source..."
+            docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" build
+            docker compose -f "$INSTALL_DIR/deploy/docker-compose.yml" up -d
+            COMPOSE_FILE_PATH="$INSTALL_DIR/deploy/docker-compose.yml"
+        fi
     fi
 fi
 
@@ -305,8 +368,8 @@ Documentation=https://github.com/${REPO}
 Type=simple
 WorkingDirectory=${INSTALL_DIR}/deploy
 EnvironmentFile=-${INSTALL_DIR}/deploy/.env
-ExecStart=docker compose up --no-build
-ExecStop=docker compose down
+ExecStart=docker compose -f ${COMPOSE_FILE_PATH} up --no-build
+ExecStop=docker compose -f ${COMPOSE_FILE_PATH} down
 IOSchedulingClass=idle
 Nice=5
 OOMScoreAdjust=200
@@ -384,7 +447,7 @@ if [ "$HEALTHY" = true ]; then
     log "Sentinel DNS is healthy and serving on port 53."
 else
     warn "Sentinel has not bound port 53 yet. Safety net cron will auto-heal if needed."
-    warn "Check logs: docker compose -f $INSTALL_DIR/deploy/docker-compose.yml logs -f"
+    warn "Check logs: docker compose -f $COMPOSE_FILE_PATH logs -f"
 fi
 
 # ─── Done ───
@@ -415,6 +478,6 @@ log "  - 50k log records buffered in RAM (~15 MB)"
 log "  - Emergency flush on shutdown (zero data loss)"
 echo ""
 log "Commands:"
-log "  Logs:    docker compose -f $INSTALL_DIR/deploy/docker-compose.yml logs -f"
-log "  Stop:    docker compose -f $INSTALL_DIR/deploy/docker-compose.yml down"
-log "  Update:  docker compose -f $INSTALL_DIR/deploy/docker-compose.yml pull && docker compose -f $INSTALL_DIR/deploy/docker-compose.yml up -d"
+log "  Logs:    docker compose -f $COMPOSE_FILE_PATH logs -f"
+log "  Stop:    docker compose -f $COMPOSE_FILE_PATH down"
+log "  Update:  docker compose -f $COMPOSE_FILE_PATH pull && docker compose -f $COMPOSE_FILE_PATH up -d"

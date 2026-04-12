@@ -1,0 +1,50 @@
+services:
+  control-plane:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.control-plane
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "8080:8080"
+    environment:
+      - SENTINEL_ADMIN_TOKEN=${SENTINEL_ADMIN_TOKEN:-changeme}
+      - SENTINEL_REQUIRE_AUTH=${SENTINEL_REQUIRE_AUTH:-true}
+      - SENTINEL_BLOCKLIST_PATH=/etc/sentinel/fixtures/blocklist.txt
+      - SENTINEL_DB_DIR=/data
+      - SENTINEL_DNS_BIND=0.0.0.0:53
+      - SENTINEL_API_BIND=0.0.0.0:8080
+      - SENTINEL_BLOCK_MODE=${SENTINEL_BLOCK_MODE:-nxdomain}
+      - SENTINEL_UPSTREAM=${SENTINEL_UPSTREAM:-}
+      - SENTINEL_HEURISTICS=${SENTINEL_HEURISTICS:-true}
+      - SENTINEL_GRAVITY_INTERVAL_SECS=${SENTINEL_GRAVITY_INTERVAL_SECS:-604800}
+      - SENTINEL_RAM_LOG_CAPACITY=${SENTINEL_RAM_LOG_CAPACITY:-50000}
+      - SENTINEL_CHECKPOINT_SECS=${SENTINEL_CHECKPOINT_SECS:-900}
+      - SENTINEL_CHECKPOINT_BATCH=${SENTINEL_CHECKPOINT_BATCH:-50000}
+      - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - sentinel-data:/data
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  dashboard:
+    image: ghcr.io/alexanderrrrrrw/sentinel-dashboard:${SENTINEL_VERSION:-latest}
+    ports:
+      - "3000:3000"
+    environment:
+      - SENTINEL_API_URL=http://control-plane:8080
+      - SENTINEL_ADMIN_TOKEN=${SENTINEL_ADMIN_TOKEN:-changeme}
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sentinel-data:

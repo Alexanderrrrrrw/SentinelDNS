@@ -21,6 +21,8 @@ curl -sSL https://raw.githubusercontent.com/Alexanderrrrrrw/SentinelDNS/main/dep
 That's it. No compilation — pre-built Docker images are pulled from GHCR in ~60 seconds. The script installs Docker if needed, disables `systemd-resolved` with a self-healing fallback, generates an admin token, tunes the OS for SD card longevity, sets up iptables DNS interception, and starts everything. If anything goes wrong, a cron job automatically restores your system resolver within 60 seconds so you never brick a headless Pi.
 
 > **Developer mode:** Pass `--build-from-source` to compile from the repo instead of pulling images.
+> Fast source mode compiles only `control-plane` and uses pre-built dashboard image. Use `--full-source-build` to compile both services.
+> If image pull fails temporarily (CI lag/GHCR propagation), rerun installer later. Source-build fallback is explicit, not automatic.
 
 `default.fst` is a **bootstrap accelerator**, not the long-term source of truth. Sentinel triggers gravity syncs after first boot so block data is refreshed from live upstream lists.
 

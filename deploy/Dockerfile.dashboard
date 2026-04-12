@@ -2,6 +2,8 @@ FROM node:20-slim AS builder
 
 WORKDIR /build
 RUN corepack enable
+ENV NODE_OPTIONS=--max-old-space-size=512
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/dashboard/ apps/dashboard/
@@ -15,6 +17,8 @@ FROM node:20-slim
 
 WORKDIR /app
 RUN corepack enable
+ENV NODE_OPTIONS=--max-old-space-size=512
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Next.js standalone in a pnpm monorepo nests the server inside the
 # original package path: .next/standalone/apps/dashboard/server.js
