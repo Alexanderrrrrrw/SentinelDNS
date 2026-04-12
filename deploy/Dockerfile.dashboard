@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:25-slim AS builder
 
 WORKDIR /build
 RUN corepack enable
@@ -13,7 +13,7 @@ RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 WORKDIR /build/apps/dashboard
 RUN pnpm build
 
-FROM node:20-slim
+FROM node:25-slim
 
 WORKDIR /app
 RUN corepack enable
